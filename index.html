@@ -515,13 +515,45 @@
 
 <script>
 // --- CONFIGURACIÓN FIREBASE ---
-let firebaseApp, auth, db; // Declaramos globalmente, pero inicializamos más abajo
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
 
-if (firebaseConfig.apiKey) {
+// INSTRUCCIÓN CLAVE: PEGA TU CONFIG AQUÍ
+// 1. **CONFIGURACIÓN MANUAL DEL USUARIO (PARA DEPLOYMENT)**
+// Reemplaza las 'YOUR_...' con tus claves reales de la Consola de Firebase.
+// Si no las reemplazas, el modo Online estará deshabilitado.
+const userFirebaseConfig = {
+    apiKey: "AIzaSyAToL7SF8dCUfFN4Ws-wLCgsPpUEC3pyts", 
+    authDomain: "impostor-futbol-online.firebaseapp.com",
+    projectId: "impostor-futbol-online",
+    storageBucket: "impostor-futbol-online.firebasestorage.app",
+    messagingSenderId: "281711462130",
+    appId: "1:281711462130:web:905781437777651acd326b"
+};
+
+let firebaseApp, auth, db; // Declaramos globalmente
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app'; // Usa el ID de Canvas si existe
+
+// 2. **DETERMINAR LA CONFIGURACIÓN FINAL**
+let finalConfig = {};
+// Prioridad 1: Configuración inyectada por el entorno Canvas
+if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    finalConfig = JSON.parse(__firebase_config);
+    console.log("Firebase config found via Canvas environment.");
+} 
+// Prioridad 2: Configuración manual del usuario (si la clave fue pegada)
+else if (userFirebaseConfig.apiKey && userFirebaseConfig.apiKey !== "AIzaSyAToL7SF8dCUfFN4Ws-wLCgsPpUEC3pyts") {
+    finalConfig = userFirebaseConfig;
+    console.log("Firebase config found via hardcoded user credentials.");
+} 
+// Ninguna configuración válida encontrada
+else {
+    console.warn("Firebase config not found. Online mode requires a valid Firebase configuration.");
+}
+
+
+// 3. **INICIALIZACIÓN DE FIREBASE**
+if (finalConfig.apiKey) {
     try {
-        firebaseApp = firebase.initializeApp(firebaseConfig);
+        firebaseApp = firebase.initializeApp(finalConfig);
         auth = firebase.auth();
         db = firebase.firestore();
 
@@ -530,7 +562,6 @@ if (firebaseConfig.apiKey) {
             auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(e => console.warn("Error setting auth persistence:", e));
         }
         if (db && db.settings) {
-            // Configuración para evitar errores en ciertos entornos
             db.settings({ experimentalForceLongPolling: true });
         }
     } catch (e) {
@@ -540,7 +571,7 @@ if (firebaseConfig.apiKey) {
         db = null;
     }
 } else {
-    console.warn("Firebase config not found. Online mode disabled.");
+    // Si no hay API Key, el modo online queda deshabilitado
     auth = null;
     db = null;
 }
@@ -879,7 +910,7 @@ document.getElementById('main-menu-btn').addEventListener('click', () => {
 document.getElementById('mode-online-btn').addEventListener('click', () => {
     if (!auth) {
         // Si auth es nulo, el modo online falló al inicializar.
-        return showMessage("El modo Online no está disponible. Error de conexión con el servicio de base de datos.");
+        return showMessage("El modo Online no está disponible. Error de conexión con el servicio de base de datos. Por favor, asegúrate de haber configurado tu API Key de Firebase.");
     }
     gameMode = 'online';
     showScreen('online-menu-screen');
