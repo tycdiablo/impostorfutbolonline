@@ -514,13 +514,11 @@
 <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/spaceship_alarm.ogg" loop preload="auto"></audio>
 
 <script>
-// --- CONFIGURACIÓN FIREBASE ---
+// --- CONFIGURACIÓN FIREBASE Y LÓGICA DE INICIALIZACIÓN ---
 
-// INSTRUCCIÓN CLAVE: PEGA TU CONFIG AQUÍ
-// 1. **CONFIGURACIÓN MANUAL DEL USUARIO (PARA DEPLOYMENT)**
-// Reemplaza las 'YOUR_...' con tus claves reales de la Consola de Firebase.
-// Si no las reemplazas, el modo Online estará deshabilitado.
-const userFirebaseConfig = {
+// 1. CONFIGURACIÓN FIREBASE PARA DEPLIEGUE EXTERNO
+// ESTE BLOQUE AHORA CONTIENE TUS CREDENCIALES, lo que asegura que si lo exportas a tu web, funcionará.
+const EXTERNAL_FIREBASE_CONFIG = {
     apiKey: "AIzaSyAToL7SF8dCUfFN4Ws-wLCgsPpUEC3pyts", 
     authDomain: "impostor-futbol-online.firebaseapp.com",
     projectId: "impostor-futbol-online",
@@ -528,30 +526,28 @@ const userFirebaseConfig = {
     messagingSenderId: "281711462130",
     appId: "1:281711462130:web:905781437777651acd326b"
 };
+// -------------------------------------------------------------
 
+let finalConfig = null;
 let firebaseApp, auth, db; // Declaramos globalmente
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app'; // Usa el ID de Canvas si existe
 
-// 2. **DETERMINAR LA CONFIGURACIÓN FINAL**
-let finalConfig = {};
-// Prioridad 1: Configuración inyectada por el entorno Canvas
+// Determinar el entorno (Canvas o Despliegue externo)
 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    // Prioridad 1: Entorno Canvas (para funcionar dentro del Preview)
     finalConfig = JSON.parse(__firebase_config);
-    console.log("Firebase config found via Canvas environment.");
-} 
-// Prioridad 2: Configuración manual del usuario (si la clave fue pegada)
-else if (userFirebaseConfig.apiKey && userFirebaseConfig.apiKey !== "AIzaSyAToL7SF8dCUfFN4Ws-wLCgsPpUEC3pyts") {
-    finalConfig = userFirebaseConfig;
-    console.log("Firebase config found via hardcoded user credentials.");
-} 
-// Ninguna configuración válida encontrada
-else {
-    console.warn("Firebase config not found. Online mode requires a valid Firebase configuration.");
+    console.log("INFO: Usando configuración de Canvas (entorno de desarrollo).");
+} else if (EXTERNAL_FIREBASE_CONFIG.apiKey) {
+    // Prioridad 2: Despliegue externo, usa la configuración hardcodeada
+    finalConfig = EXTERNAL_FIREBASE_CONFIG;
+    console.log("INFO: Usando configuración externa hardcodeada (para producción).");
+} else {
+    // Sin configuración válida
+    console.warn("ADVERTENCIA: No se encontró una configuración válida de Firebase. El modo Online estará deshabilitado.");
 }
 
-
-// 3. **INICIALIZACIÓN DE FIREBASE**
-if (finalConfig.apiKey) {
+// INICIALIZACIÓN
+if (finalConfig && finalConfig.apiKey) {
     try {
         firebaseApp = firebase.initializeApp(finalConfig);
         auth = firebase.auth();
@@ -564,16 +560,25 @@ if (finalConfig.apiKey) {
         if (db && db.settings) {
             db.settings({ experimentalForceLongPolling: true });
         }
+        console.log("Firebase inicializado correctamente.");
+        
+        // Muestra el estado inicial de la autenticación
+        if (!auth.currentUser) {
+            console.log("Autenticación pendiente o usuario no logueado aún.");
+        }
+
     } catch (e) {
-        console.error("Error durante la inicialización de Firebase:", e);
-        // Si falla, aseguramos que sean nulos para deshabilitar el modo online
+        console.error("ERROR CRÍTICO durante la inicialización de Firebase:", e);
+        // Deshabilitar si falla
         auth = null;
         db = null;
+        showMessage("Error: No se pudo conectar a Firebase. Revisa la consola para más detalles.");
     }
 } else {
-    // Si no hay API Key, el modo online queda deshabilitado
+    // Si no hay API Key o la configuración es inválida, el modo online queda deshabilitado
     auth = null;
     db = null;
+    // Mostrar el error si el usuario presiona "Modo Online"
 }
 
 
@@ -910,7 +915,7 @@ document.getElementById('main-menu-btn').addEventListener('click', () => {
 document.getElementById('mode-online-btn').addEventListener('click', () => {
     if (!auth) {
         // Si auth es nulo, el modo online falló al inicializar.
-        return showMessage("El modo Online no está disponible. Error de conexión con el servicio de base de datos. Por favor, asegúrate de haber configurado tu API Key de Firebase.");
+        return showMessage("El modo Online no está disponible. Error de conexión con el servicio de base de datos. Por favor, asegúrate de que tu configuración de Firebase es correcta.");
     }
     gameMode = 'online';
     showScreen('online-menu-screen');
@@ -975,7 +980,7 @@ document.getElementById('create-room-btn').addEventListener('click', async () =>
         enterLobby();
     } catch (e) {
         console.error(e);
-        showMessage("Error creando sala.");
+        showMessage("Error creando sala. (Revisa tus reglas de Firestore)");
     }
 });
 
@@ -1009,7 +1014,7 @@ document.getElementById('join-room-btn').addEventListener('click', async () => {
         onlineState.roomCode = code;
         enterLobby();
     } catch (e) {
-        showMessage(typeof e === 'string' ? e : "Error uniéndose");
+        showMessage(typeof e === 'string' ? e : "Error uniéndose. (Revisa el código o estado de la sala)");
     }
 });
 
