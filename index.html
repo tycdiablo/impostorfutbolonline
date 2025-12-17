@@ -515,19 +515,36 @@
 
 <script>
 // --- CONFIGURACIÓN FIREBASE ---
-// IMPORTANTE: Se usará una configuración anónima para demostración.
-// El entorno de ejecución inyectará las claves o usaremos variables globales.
+let firebaseApp, auth, db; // Declaramos globalmente, pero inicializamos más abajo
 const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
 
-if (!firebaseConfig.apiKey) {
-    console.warn("Firebase config not found. Online mode requires a valid Firebase configuration.");
+if (firebaseConfig.apiKey) {
+    try {
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+        db = firebase.firestore();
+
+        // Configuración de persistencia y logging
+        if (auth && auth.setPersistence) {
+            auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(e => console.warn("Error setting auth persistence:", e));
+        }
+        if (db && db.settings) {
+            // Configuración para evitar errores en ciertos entornos
+            db.settings({ experimentalForceLongPolling: true });
+        }
+    } catch (e) {
+        console.error("Error durante la inicialización de Firebase:", e);
+        // Si falla, aseguramos que sean nulos para deshabilitar el modo online
+        auth = null;
+        db = null;
+    }
 } else {
-    firebase.initializeApp(firebaseConfig);
+    console.warn("Firebase config not found. Online mode disabled.");
+    auth = null;
+    db = null;
 }
 
-const auth = firebase.auth ? firebase.auth() : null;
-const db = firebase.firestore ? firebase.firestore() : null;
 
 // --- DATOS Y LISTAS ---
 const allWordLists = {
@@ -860,12 +877,20 @@ document.getElementById('main-menu-btn').addEventListener('click', () => {
 // MODO ONLINE (FIREBASE)
 // ==========================================
 document.getElementById('mode-online-btn').addEventListener('click', () => {
+    if (!auth) {
+        // Si auth es nulo, el modo online falló al inicializar.
+        return showMessage("El modo Online no está disponible. Error de conexión con el servicio de base de datos.");
+    }
     gameMode = 'online';
     showScreen('online-menu-screen');
 });
 
 async function authenticate() {
-    if (!auth) return showMessage("Error de conexión con Firebase");
+    // VERIFICACIÓN CLAVE: Si auth es nulo, no podemos continuar.
+    if (!auth) {
+        return false;
+    }
+    
     if (!auth.currentUser) {
         try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -981,7 +1006,12 @@ function enterLobby() {
         if (data.status === 'playing') {
             startOnlineGameUI();
         } else if (data.status === 'finished') {
-            setupEndScreen([], data.gameState.impostorIds, data.gameState.roundType);
+            // En online, los impostorIds vienen en el gameState
+            setupEndScreen(
+                data.players.map(p => p.name), // Pasamos nombres (no se usan en online end screen)
+                data.gameState.impostorIds, // Pasamos los IDs de los impostores
+                data.gameState.roundType
+            );
         } else if (data.status === 'waiting' && document.getElementById('end-screen').classList.contains('active')) {
             // El host reinició
             showScreen('lobby-screen');
